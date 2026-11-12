@@ -47,11 +47,13 @@ button.fin{background:var(--ok)}#bar{border-radius:14px;font-weight:600;box-shad
 .pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:13px;font-weight:600;background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}.pill.r{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}.pill.y{background:color-mix(in srgb,#e0a000 20%,transparent);color:#b57a00}
 @media(max-width:820px){.shell{grid-template-columns:1fr}.side{height:auto;position:sticky;top:env(safe-area-inset-top,0px);z-index:9;flex-direction:row;align-items:center;padding:8px 10px;gap:8px}.brand b,.me,.nv span{display:none}.side nav{flex-direction:row;justify-content:space-around}.main{padding:14px}.cols{grid-template-columns:1fr}.sr{max-width:none;width:100%}}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));background:#1d1b2e;color:#fff;padding:12px 18px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.3);z-index:40;max-width:90vw}
-.ans{margin:8px 0}
+.ans{margin:8px 0}.bar.w{grid-template-columns:1fr 140px 46px}
+.warn{display:flex;gap:12px;align-items:center;justify-content:space-between;background:color-mix(in srgb,var(--bad) 15%,var(--card));border:1px solid var(--bad);padding:10px 14px;border-radius:12px;margin-bottom:12px}.warn button{padding:6px 12px;flex:none}
 </style></head><body><div id="app"></div>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 /* ===== НАЛАШТУВАННЯ: вставте свої дані з Firebase та e-mail викладача ===== */
 const FIREBASE_CONFIG={apiKey:"AIzaSyAL4cuZ0Z4unnMobiSPYvx0lpEYKUmx_9I",authDomain:"studtest-c65bc.firebaseapp.com",projectId:"studtest-c65bc",appId:"1:482670048473:web:2dbe40b06174c125053ac8"};
@@ -63,7 +65,7 @@ const root=document.getElementById("app"),mount=(...n)=>root.replaceChildren(...
 const uid=()=>Math.random().toString(36).slice(2,8),shuf=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const fmt=ms=>new Date(ms).toLocaleString("uk-UA");
 let db=null,me=null,isT=false,cleanup=()=>{};
-function toast(m){const e=h("div",{class:"toast"},m);document.body.append(e);setTimeout(()=>e.remove(),5000)}
+function toast(m){document.querySelectorAll(".toast").forEach(x=>x.remove());const e=h("div",{class:"toast"},m);document.body.append(e);setTimeout(()=>e.remove(),5000)}
 function ask(m){return new Promise(r=>{const o=h("div",{class:"ov"},h("h2",{},m),h("div",{class:"row"},h("button",{class:"d",onclick:()=>{o.remove();r(true)}},"Так"),h("button",{class:"g",style:"color:#fff",onclick:()=>{o.remove();r(false)}},"Скасувати")));document.body.append(o)})}
 window.alert=toast;
 async function init(){
@@ -156,32 +158,59 @@ function teacher(){
       qs=[{q:"",opts:["","","",""],c:0}];meta={title:"",min:20,shuf:true};tab="tests";draw();toast("Тест збережено");
     }catch(e){alert("Не вдалося зберегти: "+(e.message||e.code))}
   }
+  const mm=x=>x==null?"":Math.floor(x/60)+":"+String(x%60).padStart(2,"0");
+  const stt=r=>({finished:"Завершив",auto_finished:"Авто-завершено",time:"Час вийшов"})[r.status]||(Date.now()-(r.last||r.started)>40000?"Закрив / втратив зв’язок":"Проходить зараз");
   function vRes(){
     const s=h("select",{onchange:e=>{sel=e.target.value;draw()},style:"padding:8px;border-radius:8px"},h("option",{value:""},"— оберіть тест —"),...tests.map(t=>h("option",{value:t.id,...(t.id===sel?{selected:""}:{})},t.title)));
     const out=h("div",{},h("div",{class:"card"},s));
     const t=tests.find(x=>x.id===sel);if(!t)return out;
     const rs=results.filter(r=>r.testId===sel).sort((a,b)=>b.started-a.started);
-    const box=h("div",{class:"card wrap"},h("p",{class:"mu"},"Завантаження…"));out.append(box);
+    const box=h("div",{},h("p",{class:"mu"},"Завантаження…"));out.append(box);
     db.collection("keys").doc(sel).get().then(k=>{
-      const key=(k.data()||{}).answers||[];
-      const rows=rs.map(r=>{const a=r.answers||{};const sc=key.filter((c,i)=>a[i]===c).length;const v=r.violations||[];
-        const st={finished:"Завершив",auto_finished:"Авто-завершено",time:"Час вийшов",in_progress:(Date.now()-(r.last||r.started)>40000?"Закрив / втратив зв’язок":"Проходить зараз")}[r.status]||r.status;
-        const br=h("div",{},h("b",{},"Відповіді учня:"),...t.questions.map((q,i)=>{const a=(r.answers||{})[i],ok=a===key[i];return h("div",{class:"ans"},h("span",{class:"pill "+(a===undefined?"y":ok?"g":"r")},a===undefined?"—":ok?"✓":"✗"),h("span",{}," "+(i+1)+". "+q.q),h("div",{class:"mu"},"Відповів: "+(a===undefined?"без відповіді":q.opts[a])+(ok?"":" · Правильно: "+q.opts[key[i]])))}));
-        const det=h("tr",{style:"display:none"},h("td",{colspan:5},br,h("b",{style:"display:block;margin-top:12px"},"Порушення:"),v.length?h("ul",{},...v.map(x=>h("li",{},`${Math.floor(x.t/60)}:${String(x.t%60).padStart(2,"0")} — ${x.type}`))):h("span",{class:"ok"},"Порушень немає")));
-        const tr=h("tr",{style:"cursor:pointer",onclick:()=>det.style.display=det.style.display?"":"none"},h("td",{},r.name),h("td",{},h("span",{class:"pill "+(r.status==="in_progress"?"y":"g")},st)),
-          h("td",{},r.status==="in_progress"&&!r.finished?"—":`${sc}/${t.questions.length} (${Math.round(sc/t.questions.length*100)}%)`),h("td",{},h("span",{class:"pill "+(v.length>=3?"r":v.length?"y":"g")},v.length)),h("td",{},fmt(r.started)));
+      const key=(k.data()||{}).answers||[],n=t.questions.length;
+      const info=rs.map(r=>{const a=r.answers||{},c=key.filter((x,i)=>a[i]===x).length;return{r,a,c,v:r.violations||[],pct:Math.round(c/n*100),g:Math.max(1,Math.round(c/n*12)),fin:r.status!=="in_progress",dur:r.finished?Math.round((r.finished-r.started)/1000):null}});
+      const done=info.filter(x=>x.fin),pc=done.map(x=>x.pct),avg=pc.length?Math.round(pc.reduce((p,q)=>p+q,0)/pc.length):null;
+      const withV=info.filter(x=>x.v.length).length,totV=info.reduce((p,x)=>p+x.v.length,0);
+      const st=(l,v,sb,c)=>h("div",{class:"stat"},h("div",{class:"mu"},l),h("div",{class:"num "+(c||"")},v),h("div",{class:"mu"},sb));
+      const bk=[["90–100%",90,101],["70–89%",70,90],["50–69%",50,70],["0–49%",0,50]].map(([l,lo,hi])=>[l,done.filter(x=>x.pct>=lo&&x.pct<hi).length]),bm=Math.max(1,...bk.map(x=>x[1]));
+      const qa=t.questions.map((q,i)=>{const cc=done.filter(x=>x.a[i]===key[i]).length;return{q,i,cc,p:done.length?Math.round(cc/done.length*100):0}});
+      const rowsEl=info.flatMap(x=>{const r=x.r;
+        const det=h("tr",{style:"display:none"},h("td",{colspan:9},h("b",{},"Відповіді учня:"),...t.questions.map((q,i)=>{const a=x.a[i],ok=a===key[i];return h("div",{class:"ans"},h("span",{class:"pill "+(a===undefined?"y":ok?"g":"r")},a===undefined?"—":ok?"✓":"✗"),h("span",{}," "+(i+1)+". "+q.q),h("div",{class:"mu"},"Відповів: "+(a===undefined?"без відповіді":q.opts[a])+(ok?"":" · Правильно: "+q.opts[key[i]])))}),h("b",{style:"display:block;margin-top:12px"},"Порушення:"),x.v.length?h("ul",{},...x.v.map(z=>h("li",{},mm(z.t)+" — "+z.type))):h("span",{class:"ok"},"Порушень немає")));
+        const tr=h("tr",{style:"cursor:pointer",onclick:()=>det.style.display=det.style.display?"":"none"},h("td",{},r.name),h("td",{},h("span",{class:"pill "+(x.fin?"g":"y")},stt(r))),h("td",{},x.fin?`${x.c}/${n}`:"—"),h("td",{},x.fin?x.pct+"%":"—"),h("td",{},x.fin?x.g:"—"),h("td",{},h("span",{class:"pill "+(x.v.length>=3?"r":x.v.length?"y":"g")},x.v.length)),h("td",{},mm(x.dur)||"—"),h("td",{},fmt(r.started)),h("td",{class:"mu"},"Деталі ▾"));
         return[tr,det]});
-      box.replaceChildren(h("div",{class:"row",style:"margin-bottom:8px"},h("b",{},`Учнів: ${rs.length}`),h("button",{class:"g",onclick:()=>exp(t,rs,key)},"Завантажити CSV"),
-        h("button",{class:"g",onclick:async()=>{if(await ask("Видалити всі результати цього тесту?"))for(const r of rs)await db.collection("results").doc(r.id).delete()}},"Очистити")),
-        rs.length?h("table",{},h("tr",{},...["Учень","Статус","Бал","Порушень","Початок"].map(x=>h("th",{},x))),...rows.flat()):h("p",{class:"mu"},"Результатів ще немає. Клік по рядку — деталі порушень."));
-    }).catch(()=>box.replaceChildren(h("p",{class:"bad"},"Не вдалося завантажити відповіді")));
+      box.replaceChildren(
+        h("div",{class:"stats"},st("Учнів",info.length,`${done.length} завершили`),st("Середній бал",avg==null?"—":avg+"%","по завершених"),st("Найкращий / найнижчий",pc.length?Math.max(...pc)+"% / "+Math.min(...pc)+"%":"—","за результатом"),st("Порушення",totV,`${withV} учнів з порушеннями`,totV?"bad":"")),
+        h("div",{class:"cols"},
+          h("div",{class:"card"},h("h2",{},"Розподіл результатів"),...bk.map(([l,c])=>h("div",{class:"bar"},h("span",{class:"bl"},l),h("div",{class:"bt"},h("i",{style:`width:${c/bm*100}%`})),h("b",{},c)))),
+          h("div",{class:"card"},h("h2",{},"Складність питань"),h("div",{class:"mu"},"% учнів, які відповіли правильно"),...qa.map(o=>h("div",{class:"bar w",title:o.q.q},h("span",{class:"bl"},(o.i+1)+". "+o.q.q),h("div",{class:"bt"},h("i",{style:`width:${o.p}%`})),h("b",{class:o.p<50?"bad":""},o.p+"%"))))),
+        h("div",{class:"card wrap",style:"margin-top:14px"},h("div",{class:"row",style:"margin-bottom:8px"},h("h2",{style:"margin:0;flex:1"},"Учні"),h("button",{onclick:()=>expXlsx(t,key,info)},"Excel (.xlsx)"),h("button",{class:"g",onclick:()=>expCsv(t,key,info)},"CSV"),
+          h("button",{class:"g",onclick:async()=>{if(await ask("Видалити всі результати цього тесту?"))for(const r of rs)await db.collection("results").doc(r.id).delete()}},"Очистити")),
+          rs.length?h("table",{},h("tr",{},...["Учень","Статус","Бал","%","Оцінка (12)","Порушень","Час","Початок",""].map(x=>h("th",{},x))),...rowsEl):h("p",{class:"mu"},"Результатів ще немає. Клік по рядку учня розкриває його відповіді та порушення."))
+      );
+    }).catch(e=>box.replaceChildren(h("p",{class:"bad"},"Не вдалося завантажити: "+(e.message||e))));
     return out;
   }
-  async function exp(t,rs,key){
-    
-    const q=x=>'"'+String(x).replace(/"/g,'""')+'"';
-    const lines=[["Учень","Статус","Бал","Порушень","Деталі"].map(q).join(",")].concat(rs.map(r=>{const a=r.answers||{};const sc=key.filter((c,i)=>a[i]===c).length;const v=r.violations||[];return[r.name,r.status,sc+"/"+t.questions.length,v.length,v.map(x=>x.t+"с "+x.type).join("; ")].map(q).join(",")}));
-    const a=h("a",{href:URL.createObjectURL(new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv"})),download:"results.csv"});document.body.append(a);a.click();a.remove()
+  function pack(t,key,info){
+    const n=t.questions.length,done=info.filter(x=>x.fin),pc=done.map(x=>x.pct);
+    const avg=pc.length?Math.round(pc.reduce((p,q)=>p+q,0)/pc.length):"";
+    const sum=[["Тест",t.title],["Вивантажено",fmt(Date.now())],["Питань",n],["Учнів (усього)",info.length],["Завершили",done.length],["Середній %",avg],["Найкращий %",pc.length?Math.max(...pc):""],["Найнижчий %",pc.length?Math.min(...pc):""],["Учнів із порушеннями",info.filter(x=>x.v.length).length],["Усього порушень",info.reduce((p,x)=>p+x.v.length,0)]];
+    const rows=[["№","Учень","Статус","Правильних","Питань","%","Оцінка (12)","Порушень","Тривалість","Початок",...t.questions.map((_,i)=>"П"+(i+1)),"Журнал порушень"],
+      ...info.map((x,j)=>[j+1,x.r.name,stt(x.r),x.fin?x.c:"",n,x.fin?x.pct:"",x.fin?x.g:"",x.v.length,mm(x.dur),fmt(x.r.started),...t.questions.map((q,i)=>x.a[i]===undefined?"—":x.a[i]===key[i]?"✓":"✗"),x.v.map(z=>mm(z.t)+" "+z.type).join("; ")])];
+    const q=[["№","Питання","Правильна відповідь","Відповіли правильно","Усього","% правильних","Найчастіша помилка"],...t.questions.map((qq,i)=>{const cc=done.filter(x=>x.a[i]===key[i]).length,wr={};done.forEach(x=>{const a=x.a[i];if(a!==undefined&&a!==key[i])wr[a]=(wr[a]||0)+1});const top=Object.entries(wr).sort((a,b)=>b[1]-a[1])[0];return[i+1,qq.q,qq.opts[key[i]],cc,done.length,done.length?Math.round(cc/done.length*100):"",top?qq.opts[top[0]]+" ("+top[1]+")":""]})];
+    const v=[["Учень","Час від початку","Порушення"]];info.forEach(x=>x.v.forEach(z=>v.push([x.r.name,mm(z.t),z.type])));
+    return{sum,rows,q,v};
+  }
+  const fname=t=>t.title.replace(/[^\wа-яіїєґА-ЯІЇЄҐ\- ]/g,"").trim()||"test";
+  function expXlsx(t,key,info){
+    if(!window.XLSX)return toast("Бібліотека Excel не завантажилась, скористайтеся CSV");
+    const P=pack(t,key,info),wb=XLSX.utils.book_new(),add=(nm,rw,w)=>{const ws=XLSX.utils.aoa_to_sheet(rw);ws["!cols"]=w.map(x=>({wch:x}));XLSX.utils.book_append_sheet(wb,ws,nm)};
+    add("Підсумок",P.sum,[26,34]);add("Результати",P.rows,[4,26,22,11,8,6,11,10,11,20,...t.questions.map(()=>4),70]);add("Питання",P.q,[4,60,32,12,8,12,36]);add("Порушення",P.v,[26,14,70]);
+    XLSX.writeFile(wb,fname(t)+"_результати.xlsx");
+  }
+  function expCsv(t,key,info){
+    const P=pack(t,key,info),q=x=>'"'+String(x).replace(/"/g,'""')+'"';
+    const txt="\ufeff"+P.rows.map(r=>r.map(q).join(";")).join("\r\n");
+    const a=h("a",{href:URL.createObjectURL(new Blob([txt],{type:"text/csv;charset=utf-8"})),download:fname(t)+"_результати.csv"});document.body.append(a);a.click();a.remove();
   }
   draw();
 }
@@ -221,9 +250,11 @@ async function student(id){
     const hb=setInterval(()=>ref.update({last:Date.now()}).catch(()=>{}),10000);
     const flush=()=>{clearTimeout(fl);fl=setTimeout(()=>ref.update({violations:viol,answers:ans}).catch(()=>{}),700)};
     const bar=h("span",{}),tm=h("span",{});
-    const upd=()=>bar.textContent=`Порушень: ${viol.length}`+(leaves?` · Виходів: ${leaves}/${MAX_LEAVES}`:"");
-    const log=ty=>{if(fin)return;viol.push({t:Math.round((Date.now()-t0)/1000),type:ty});upd();flush()};
-    const leave=ty=>{if(fin||away)return;away=true;leaves++;log(ty);upd();if(leaves>=MAX_LEAVES)finish("auto_finished")};
+    const wn=h("div",{class:"warn",style:"display:none"});
+    const warn=m=>{wn.replaceChildren(h("span",{},m),h("button",{onclick:()=>{wn.style.display="none"}},"Зрозуміло"));wn.style.display="flex"};
+    const upd=()=>{bar.textContent=`Порушень: ${viol.length} · Залишилось виходів: ${MAX_LEAVES-leaves}`;bar.style.color=leaves>=MAX_LEAVES-1?"var(--bad)":""};
+    const log=(ty,q)=>{if(fin)return;viol.push({t:Math.round((Date.now()-t0)/1000),type:ty});upd();flush();if(!q)toast("⚠ Зафіксовано: "+ty)};
+    const leave=ty=>{if(fin||away)return;away=true;leaves++;log(ty,1);upd();if(leaves>=MAX_LEAVES)finish("auto_finished");else warn(`⚠ Зафіксовано вихід зі сторінки (${leaves} з ${MAX_LEAVES}): ${ty}. Ще ${MAX_LEAVES-leaves} — і тест буде завершено автоматично.`)};
     const poll=setInterval(()=>{if(document.hasFocus()&&!document.hidden)away=false;else leave("Фокус втрачено (інша програма, вікно або вкладка)")},1000);
     let ov=null;
     const on=(tg,ev,fn,o)=>{tg.addEventListener(ev,fn,o);offs.push(()=>tg.removeEventListener(ev,fn,o))},offs=[];
@@ -252,7 +283,7 @@ async function student(id){
         h("div",{class:"row",style:"justify-content:space-between"},h("button",{class:"g",...(cur?{}:{disabled:""}),onclick:()=>{cur--;draw()}},"← Назад"),
           cur<order.length-1?h("button",{onclick:()=>{cur++;draw()}},"Далі →"):h("button",{class:"fin",onclick:()=>{const m=order.length-Object.keys(ans).length;if(!m||warned)finish("finished");else{warned=true;alert(`Без відповіді: ${m}. Натисніть ще раз, щоб завершити.`)}}},"Завершити тест")));
     };
-    mount(h("div",{id:"bar"},tm,bar),prog,body);draw();
+    mount(h("div",{id:"bar"},tm,bar),wn,prog,body);draw();
     upd();
     function tick(){if(!t.min){tm.textContent="";return}const left=t0+t.min*60000-Date.now();if(left<=0)return finish("time");tm.textContent=`Залишилось: ${Math.floor(left/60000)}:${String(Math.floor(left/1000)%60).padStart(2,"0")}`}
     tick();timer=setInterval(tick,1000);
