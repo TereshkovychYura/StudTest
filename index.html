@@ -57,7 +57,7 @@ button.fin{background:var(--ok)}#bar{border-radius:14px;font-weight:600;box-shad
 <script>
 /* ===== НАЛАШТУВАННЯ: вставте свої дані з Firebase та e-mail викладача ===== */
 const FIREBASE_CONFIG={apiKey:"AIzaSyAL4cuZ0Z4unnMobiSPYvx0lpEYKUmx_9I",authDomain:"studtest-c65bc.firebaseapp.com",projectId:"studtest-c65bc",appId:"1:482670048473:web:2dbe40b06174c125053ac8"};
-const TEACHER_EMAIL="vash.email@gmail.com";
+const TEACHER_EMAIL="tereshkovychura@gmail.com";
 const MAX_LEAVES=3; /* скільки виходів зі сторінки до автозавершення */
 /* ========================================================================== */
 const h=(t,a={},...c)=>{const e=document.createElement(t);for(const k in a){if(k==="class")e.className=a[k];else if(k.startsWith("on"))e.addEventListener(k.slice(2),a[k]);else if(k==="value")e.value=a[k];else e.setAttribute(k,a[k])}c.flat().forEach(x=>e.append(x&&x.nodeType?x:document.createTextNode(x==null?"":x)));return e};
